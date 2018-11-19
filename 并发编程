@@ -1,0 +1,424 @@
+多线程缘由：
+	 在出现了进程之后，操作系统的性能得到了大大的提升。虽然进程的出现解决了操作系统的并发问题，但是人们仍然不满足，人们逐渐对实时性有了要求。
+	使用多线程的理由之一是和进程相比，它是一种非常花销小，切换快，更”节俭”的多任务操作方式。
+	在Linux系统下，启动一个新的进程必须分配给它独立的地址空间，建立众多的数据表来维护它的代码段、堆栈段和数据段，这是一种”昂贵”的多任务工作方式。而在进程中的同时运行多个线程，它们彼此之间使用相同的地址空间，共享大部分数据，启动一个线程所花费的空间远远小于启动一个进程所花费的空间，而且，线程间彼此切换所需的时间也远远小于进程间切换所需要的时间。
+
+多线程并发面临的问题：
+	 由于多个线程是共同占有所属进程的资源和地址空间的，那么就会存在一个问题：
+	如果多个线程要同时访问某个资源，怎么处理？
+	在Java并发编程中，经常遇到多个线程访问同一个 共享资源 ，这时候作为开发者必须考虑如何维护数据一致性，这就是Java锁机制(同步问题)的来源。
+
+	Java提供了多种多线程锁机制的实现方式，常见的有：
+
+    synchronized
+    ReentrantLock
+    Semaphore
+    AtomicInteger等
+
+4种Java线程锁(线程同步)：
+1.synchronized
+	在Java中synchronized关键字被常用于维护数据一致性。
+	synchronized机制是给共享资源上锁，只有拿到锁的线程才可以访问共享资源，这样就可以强制使得对共享资源的访问都是顺序的。
+	Java开发人员都认识synchronized，使用它来实现多线程的同步操作是非常简单的，只要在需要同步的对方的方法、类或代码块中加入该关键字，它能够保证在同一个时刻最多只有一个线程执行同一个对象的同步代码，可保证修饰的代码在执行过程中不会被其他线程干扰。使用synchronized修饰的代码具有原子性和可见性，在需要进程同步的程序中使用的频率非常高，可以满足一般的进程同步要求。
+	synchronized实现的机理依赖于软件层面上的JVM，因此其性能会随着Java版本的不断升级而提高。
+	到了Java1.6，synchronized进行了很多的优化，有适应自旋、锁消除、锁粗化、轻量级锁及偏向锁等，效率有了本质上的提高。在之后推出的Java1.7与1.8中，均对该关键字的实现机理做了优化。
+	需要说明的是，当线程通过synchronized等待锁时是不能被Thread.interrupt()中断的，因此程序设计时必须检查确保合理，否则可能会造成线程死锁的尴尬境地。
+	最后，尽管Java实现的锁机制有很多种，并且有些锁机制性能也比synchronized高，但还是强烈推荐在多线程应用程序中使用该关键字，因为实现方便，后续工作由JVM来完成，可靠性高。只有在确定锁机制是当前多线程程序的性能瓶颈时，才考虑使用其他机制，如ReentrantLock等。 
+2.ReentrantLock
+	可重入锁，顾名思义，这个锁可以被线程多次重复进入进行获取操作。
+	ReentantLock继承接口Lock并实现了接口中定义的方法，除了能完成synchronized所能完成的所有工作外，还提供了诸如可响应中断锁、可轮询锁请求、定时锁等避免多线程死锁的方法。
+	Lock实现的机理依赖于特殊的CPU指定，可以认为不受JVM的约束，并可以通过其他语言平台来完成底层的实现。在并发量较小的多线程应用程序中，ReentrantLock与synchronized性能相差无几，但在高并发量的条件下，synchronized性能会迅速下降几十倍，而ReentrantLock的性能却能依然维持一个水准。
+	因此我们建议在高并发量情况下使用ReentrantLock。
+
+	ReentrantLock引入两个概念：公平锁与非公平锁。
+	公平锁指的是锁的分配机制是公平的，通常先对锁提出获取请求的线程会先被分配到锁。反之，JVM按随机、就近原则分配锁的机制则称为不公平锁。
+	ReentrantLock在构造函数中提供了是否公平锁的初始化方式，默认为非公平锁。这是因为，非公平锁实际执行的效率要远远超出公平锁，除非程序有特殊需要，否则最常用非公平锁的分配机制。
+	ReentrantLock通过方法lock()与unlock()来进行加锁与解锁操作，与synchronized会被JVM自动解锁机制不同，ReentrantLock加锁后需要手动进行解锁。为了避免程序出现异常而无法正常解锁的情况，使用ReentrantLock必须在finally控制块中进行解锁操作。
+ 3.Semaphore
+	上述两种锁机制类型都是“互斥锁”，学过操作系统的都知道，互斥是进程同步关系的一种特殊情况，相当于只存在一个临界资源，因此同时最多只能给一个线程提供服务。但是，在实际复杂的多线程应用程序中，可能存在多个临界资源，这时候我们可以借助Semaphore信号量来完成多个临界资源的访问。
+	Semaphore基本能完成ReentrantLock的所有工作，使用方法也与之类似，通过acquire()与release()方法来获得和释放临界资源。
+	经实测，Semaphone.acquire()方法默认为可响应中断锁，与ReentrantLock.lockInterruptibly()作用效果一致，也就是说在等待临界资源的过程中可以被Thread.interrupt()方法中断。
+	此外，Semaphore也实现了可轮询的锁请求与定时锁的功能，除了方法名tryAcquire与tryLock不同，其使用方法与ReentrantLock几乎一致。Semaphore也提供了公平与非公平锁的机制，也可在构造函数中进行设定。
+	Semaphore的锁释放操作也由手动进行，因此与ReentrantLock一样，为避免线程因抛出异常而无法正常释放锁的情况发生，释放锁的操作也必须在finally代码块中完成。 
+ 4.AtomicInteger
+	首先说明，此处AtomicInteger是一系列相同类的代表之一，常见的还有AtomicLong、AtomicBoolean等，他们的实现原理相同，区别在与运算对象类型的不同。
+	我们知道，在多线程程序中，诸如++i或i++等运算不具有原子性，是不安全的线程操作之一。通常我们会使用synchronized将该操作变成一个原子操作，但JVM为此类操作特意提供了一些同步类，使得使用更方便，且使程序运行效率变得更高。通过相关资料显示，通常AtomicInteger的性能是ReentantLock的好几倍。 
+
+1.synchronized：
+	在资源竞争不是很激烈的情况下，偶尔会有同步的情形下，synchronized是很合适的。原因在于，编译程序通常会尽可能的进行优化synchronize，另外可读性非常好。
+2.ReentrantLock:
+	在资源竞争不激烈的情形下，性能稍微比synchronized差点点。但是当同步非常激烈的时候，synchronized的性能一下子能下降好几十倍，而ReentrantLock确还能维持常态。
+	高并发量情况下使用ReentrantLock。
+3.Atomic:
+	和上面的类似，不激烈情况下，性能比synchronized略逊，而激烈的时候，也能维持常态。激烈的时候，Atomic的性能会优于ReentrantLock一倍左右。但是其有一个缺点，就是只能同步一个值，一段代码中只能出现一个Atomic的变量，多于一个同步无效。因为他不能在多个Atomic之间同步。
+	所以，我们写同步的时候，优先考虑synchronized，如果有特殊需要，再进一步优化。ReentrantLock和Atomic如果用的不好，不仅不能提高性能，还可能带来灾难。 
+
+线程池的缘由：
+	java中为了提高并发度，可以使用多线程共同执行,但是如果有大量线程短时间之内被创建和销毁，会占用大量的系统时间，影响系统效率。
+	为了解决上面的问题，java中引入了线程池，可以使创建好的线程在指定的时间内由系统统一管理，而不是在执行时创建，执行后就销毁，从而避免了频繁创建、销毁线程带来的系统开销。
+
+就以ThreadPoolExecutor为例，当我们把一个Runnable交给线程池去执行的时候，这个线程池处理的流程是这样的：
+	先判断线程池中的核心线程们是否空闲，如果空闲，就把这个新的任务指派给某一个空闲线程去执行。如果没有空闲，并且当前线程池中的核心线程数还小于 corePoolSize，那就再创建一个核心线程。
+    如果线程池的线程数已经达到核心线程数，并且这些线程都繁忙，就把这个新来的任务放到等待队列中去。如果等待队列又满了，那么查看一下当前线程数是否到达
+    maximumPoolSize，如果还未到达，就继续创建线程。
+    如果已经到达了，就交给RejectedExecutionHandler(拒绝策略)来决定怎么处理这个任务。
+
+线程池的使用(ThreadPoolExecutor):
+	在Java中，线程池的概念是Executor这个接口，具体实现为ThreadPoolExecutor类，是线程池中最核心的一个类，因此如果要透彻地了解Java中的线程池，必须先了解这个类.
+
+	ThreadPoolExecutor继承了AbstractExecutorService类，并提供了四个构造器：
+
+    public class ThreadPoolExecutor extends AbstractExecutorService {
+
+    …..
+
+    public ThreadPoolExecutor(int corePoolSize,int maximumPoolSize,long keepAliveTime,TimeUnit unit,
+
+    BlockingQueue<Runnable> workQueue);
+
+    public ThreadPoolExecutor(int corePoolSize,int maximumPoolSize,long keepAliveTime,TimeUnit unit,
+
+    BlockingQueue<Runnable> workQueue,ThreadFactory threadFactory);
+
+    public ThreadPoolExecutor(int corePoolSize,int maximumPoolSize,long keepAliveTime,TimeUnit unit,
+
+    BlockingQueue<Runnable> workQueue,RejectedExecutionHandler handler);
+
+    public ThreadPoolExecutor(int corePoolSize,int maximumPoolSize,long keepAliveTime,TimeUnit unit,
+
+    BlockingQueue<Runnable> workQueue,ThreadFactory threadFactory,RejectedExecutionHandler handler);
+
+    …
+
+    }
+
+ ThreadPoolExecutor继承了AbstractExecutorService类，并提供了四个构造器，事实上，通过观察每个构造器的源码具体实现，发现前面三个构造器都是调用的第四个构造器进行的初始化工作。
+
+下面解释下一下构造器中各个参数的含义：
+1.corePoolSize（线程池的基本大小）
+	当提交一个任务到线程池时，线程池会创建一个线程来执行任务，即使其他空闲的基本线程能够执行新任务也会创建线程，等到需要执行的任务数大于线程池基本大小时就不再创建。如果调用了线程池的prestartAllCoreThreads方法，线程池会提前创建并启动所有基本线程。
+2.runnableTaskQueue（任务队列）
+	用于保存等待执行的任务的阻塞队列。可以选择以下几个阻塞队列。
+
+    ArrayBlockingQueue：是一个基于数组结构的有界阻塞队列，此队列按 FIFO（先进先出）原则对元素进行排序。
+    LinkedBlockingQueue：一个基于链表结构的阻塞队列，此队列按FIFO （先进先出） 排序元素，吞吐量通常要高于ArrayBlockingQueue。
+    SynchronousQueue：一个不存储元素的阻塞队列。每个插入操作必须等到另一个线程调用移除操作，否则插入操作一直处于阻塞状态，吞吐量通常要高于LinkedBlockingQueue
+    PriorityBlockingQueue：一个具有优先级得无限阻塞队列。
+3.maximumPoolSize（线程池最大大小）
+	线程池允许创建的最大线程数。如果队列满了，并且已创建的线程数小于最大线程数，则线程池会再创建新的线程执行任务。值得注意的是如果使用了无界的任务队列这个参数就没什么效果。
+4.ThreadFactory：用于设置创建线程的工厂
+	可以通过线程工厂给每个创建出来的线程设置更有意义的名字，Debug和定位问题时非常又帮助。
+5.RejectedExecutionHandler（饱和策略）
+	当队列和线程池都满了，说明线程池处于饱和状态，那么必须采取一种策略处理提交的新任务。这个策略默认情况下是AbortPolicy，表示无法处理新任务时抛出异常。以下是
+	JDK1.5提供的四种策略。
+
+	AbortPolicy：直接抛出异常。
+    CallerRunsPolicy：只用调用者所在线程来运行任务。
+    DiscardOldestPolicy：丢弃队列里最近的一个任务，并执行当前任务。
+    DiscardPolicy：不处理，丢弃掉。
+    当然也可以根据应用场景需要来实现RejectedExecutionHandler接口自定义策略。如记录日志或持久化不能处理的任务。
+
+6.keepAliveTime（线程活动保持时间）
+	线程池的工作线程空闲后，保持存活的时间。所以如果任务很多，并且每个任务执行的时间比较短，可以调大这个时间，提高线程的利用率。
+7.TimeUnit（线程活动保持时间的单位）
+	可选的单位有天（DAYS），小时（HOURS），分钟（MINUTES），毫秒(MILLISECONDS)，微秒(MICROSECONDS, 千分之一毫秒)和毫微秒(NANOSECONDS, 千分之一微秒)。 
+
+线程池注意事项：
+	虽然线程池能大大提高服务器的并发性能，但使用它也会存在一定风险。与所有多线程应用程序一样，用线程池构建的应用程序容易产生各种并发问题，如对共享资源的竞争和死锁。此外，如果线程池本身的实现不健壮，或者没有合理地使用线程池，还容易导致与线程池有关的死锁、系统资源不足和线程泄漏等问题。
+1) 建议使用new ThreadPoolExecutor(…)的方式创建线程池
+	线程池的创建不应使用Executors 去创建，而应该通过 ThreadPoolExecutor创建，这样可以让读者更加明确地知道线程池的参数设置、运行规则，规避资源耗尽的风险，这一点在也阿里巴巴JAVA开发手册中也有明确要求。这一点不容小觑，曾有同学因为线程池使用不当导致生产的同一台机器上部署的多个应用都因无法创建线程池而出现故障。
+2) 合理设置线程数
+	线程池的工作线程数设置应根据实际情况配置，CPU密集型业务（搜索、排序等）CPU空闲时间较少，线程数不能设置太多。
+	如果是CPU密集型任务，就需要尽量压榨CPU，参考值可以设为 NCPU+1
+	如果是IO密集型任务，参考值可以设置为2*NCPU
+3) 设置能代表具体业务的线程名称
+	这样方便通过日志的线程名称识别所属业务。具体实现可以通过指定ThreadPoolExecutor的ThreadFactory参数。如使Spring提供的CustomizableThreadFactory。 
+
+BIO（blocking-IO）(同步阻塞I/O模型)
+	数据的读取写入必须阻塞在一个线程内等待其完成。
+	JDK1.4之前的唯一选择。
+NIO（non-blocking-IO）（同步非阻塞I/O模型）
+	叫一个线程不断的轮询每个水壶的状态。
+	JDK1.5开始支持。
+AIO（synchronous-non-blocking-IO）(异步非阻塞I/O模型)
+	无序一个线程去轮询所有IO操作的状态改变，在相应的状态改变后，系统会通知对应的线程来处理。
+	JDK1.7支持。
+
+IO是面向流	NIO是面向缓冲区 有选择器
+
+同步：发送一个请求，等待返回，再发送下一个请求，同步可以避免出现死锁，脏读的发生。
+异步：发送一个请求，不等待返回，随时都可以再发送下一个请求，可以提高效率，保证并发。
+
+阻塞：
+	传统的IO流都是阻塞式的。也就是说，当一个线程调用read()或者write()方法时，该线程将被阻塞，直到有一些数据读读取或者被写入，在此期间，该线程不能执行其他任何任务。在完成网络通信进行IO操作时，由于线程会阻塞，所以服务器端必须为每个客户端都提供一个独立的线程进行处理，当服务器端需要处理大量的客户端时，性能急剧下降。
+非阻塞：
+	NIO是非阻塞式的。当线程从某通道进行读写数据时，若没有数据可用时，该线程会去执行其他任务。线程通常将非阻塞IO的空闲时间用于在其他通道上执行IO操作，所以单独的线程可以管理多个输入和输出通道。因此NIO可以让服务器端使用一个或有限几个线程来同时处理连接到服务器端的所有客户端。
+
+适用场景：	
+    BIO方式适用于连接数目比较小且固定的架构，这种方式对服务器资源要求比较高，并发局限于应用中，JDK1.4以前的唯一选择。
+    NIO方式适用于连接数目多且连接比较短（轻操作）的架构，比如聊天服务器，并发局限于应用中，编程比较复杂。
+    AIO方式使用于连接数目多且连接比较长（重操作）的架构，比如相册服务器，充分调用OS参与并发操作，编程比较复杂，JDK7开始支持。
+
+NIO的三个核心概念：
+	Channel(通道)、Buffer（缓冲区）、Selector（选择器）
+
+缓冲区Buffer：
+	 Buffer是一个对象。它包含一些要写入或者读出的数据。在面向流的I/O中，可以将数据写入或者将数据直接读到Stream对象中。
+	在NIO中，所有的数据都是用缓冲区处理。这也就本文上面谈到的IO是面向流的，NIO是面向缓冲区的。
+	缓冲区实质是一个数组，通常它是一个字节数组（ByteBuffer），也可以使用其他类的数组。但是一个缓冲区不仅仅是一个数组，缓冲区提供了对数据的结构化访问以及维护读写位置（limit）等信息。
+	最常用的缓冲区是ByteBuffer，一个ByteBuffer提供了一组功能于操作byte数组。除了ByteBuffer，还有其他的一些缓冲区，事实上，每一种Java基本类型（除了Boolean）都对应一种缓冲区，具体如下：
+
+    ByteBuffer：字节缓冲区
+    CharBuffer:字符缓冲区
+    ShortBuffer：短整型缓冲区
+    IntBuffer：整型缓冲区
+    LongBuffer:长整型缓冲区
+    FloatBuffer：浮点型缓冲区
+    DoubleBuffer：双精度浮点型缓冲区
+
+通道Channel：
+	Channel是一个通道，可以通过它读取和写入数据，它就像自来水管一样，网络数据通过Channel读取和写入。
+	通道和流不同之处在于通道是双向的，流只是在一个方向移动，而且通道可以用于读，写或者同时用于读写。
+	因为Channel是双向的，所以它比流更好地映射底层操作系统的API，特别是在UNIX网络编程中，底层操作系统的通道都是双向的，同时支持读和写。
+	Channel有四种实现：
+
+    FileChannel:是从文件中读取数据。
+    DatagramChannel:从UDP网络中读取或者写入数据。
+    SocketChannel:从TCP网络中读取或者写入数据。
+    ServerSocketChannel:允许你监听来自TCP的连接，就像服务器一样。每一个连接都会有一个SocketChannel产生。
+
+多路复用器Selector：
+	 Selector选择器可以监听多个Channel通道感兴趣的事情(read、write、accept(服务端接收)、connect，实现一个线程管理多个Channel，节省线程切换上下文的资源消耗。Selector只能管理非阻塞的通道，FileChannel是阻塞的，无法管理。
+
+关键对象
+    Selector：选择器对象，通道注册、通道监听对象和Selector相关。
+    SelectorKey：通道监听关键字，通过它来监听通道状态。
+
+监听注册
+
+监听注册在Selector
+    socketChannel.register(selector, SelectionKey.OP_READ);
+
+监听的事件有
+    OP_ACCEPT: 接收就绪，serviceSocketChannel使用的
+    OP_READ: 读取就绪，socketChannel使用
+    OP_WRITE: 写入就绪，socketChannel使用
+    OP_CONNECT: 连接就绪，socketChannel使用
+
+NIO的应用
+	Java NIO成功的应用在了各种分布式、即时通信和中间件Java系统中，充分的证明了基于NIO构建的通信基础，是一种高效，且扩展性很强的通信架构。
+	例如：Dubbo(服务框架)，就默认使用Netty作为基础通信组件，用于实现各进程节点之间的内部通信。
+	Jetty、Mina、Netty、Dubbo、ZooKeeper等都是基于NIO方式实现。
+
+    Mina出身于开源界的大牛Apache组织
+    Netty出身于商业开源大亨Jboss
+    Dubbo阿里分布式服务框架
+
+NIO框架
+	特别是Netty是目前最流行的一个Java开源框架NIO框架，Netty提供异步的、事件驱动的网络应用程序框架和工具，用以快速开发高性能、高可靠性的网络服务器和客户端程序。
+	相比JDK原生NIO，Netty提供了相对十分简单易用的API，非常适合网络编程。
+	Mina和Netty这两个NIO框架的创作者是同一个人Trustin Lee。
+	Netty从某种程度上讲是Mina的延伸和扩展，解决了一些Mina上的设计缺陷，也优化了一下Mina上面的设计理念。
+
+另一方面Netty相比较Mina的优势：
+
+    更容易学习
+    API更简单
+    详细的范例源码和API文档
+    更活跃的论坛和社区
+    更高的代码更新维护速度
+
+Netty无疑是NIO框架的首选，它的健壮性、功能、性能、可定制性和可扩展性在同类框架都是首屈一指的
+
+哈希表就是一种以 键-值(key-indexed) 存储数据的结构，我们只要输入待查找的值即key，即可查找到其对应的值。
+哈希的思路很简单，如果所有的键都是整数，那么就可以使用一个简单的无序数组来实现：将键作为索引，值即为其对应的值，这样就可以快速访问任意键的值。这是对于简单的键的情况，我们将其扩展到可以处理更加复杂的类型的键。
+
+链式哈希表从根本上说是由一组链表构成。每个链表都可以看做是一个“桶”，我们将所有的元素通过散列的方式放到具体的不同的桶中。插入元素时，首先将其键传入一个哈希函数（该过程称为哈希键），函数通过散列的方式告知元素属于哪个“桶”，然后在相应的链表头插入元素。查找或删除元素时，用同们的方式先找到元素的“桶”，然后遍历相应的链表，直到发现我们想要的元素。因为每个“桶”都是一个链表，所以链式哈希表并不限制包含元素的个数。然而，如果表变得太大，它的性能将会降低。
+
+链式哈希表的应用场景：
+	熟知的缓存技术（比如redis、memcached）的核心其实就是在内存中维护一张巨大的哈希表，还有大家熟知的HashMap、CurrentHashMap等的应用。
+
+HashMap是线程不安全的，在多线程环境下，使用HashMap进行put操作会引起死循环，导致CPU利用率接近 100%。
+HashTable实现原理几乎相同，不允许key和value为null，是线程安全的。
+
+HashTable线程安全的策略实现代价：简单粗暴，get/put所有相关操作都是synchronized的，这相当于给整个哈希表加了一把大锁。
+多线程访问时候，只要有一个线程访问或操作该对象，那其他线程只能阻塞，相当于将所有的操作串行化，在竞争激烈的并发场景中性能就会非常差。 
+
+Map一般都是数组+链表结构（JDK1.8该为数组+红黑树）
+ConcurrentHashMap避免了对全局加锁改成了局部加锁操作，这样就极大地提高了并发环境下的操作速度。
+
+JDK1.7中ConcurrentHashMap采用了数组+Segment+分段锁的方式实现。
+	ConcurrentHashMap中的分段锁称为Segment，它即类似于HashMap的结构，即内部拥有一个Entry数组，数组中的每个元素又是一个链表,同时又是一个ReentrantLock
+	（Segment继承了ReentrantLock）。 
+	ConcurrentHashMap使用分段锁技术，将数据分成一段一段的存储，然后给每一段数据配一把锁，当一个线程占用锁访问其中一个段数据的时候，其他段的数据也能被其他线程访问，能够实现真正的并发访问。
+	ConcurrentHashMap定位一个元素的过程需要进行两次Hash操作。第一次Hash定位到Segment，第二次Hash定位到元素所在的链表的头部。 
+	ConcurrentHashMap将哈希表分为16个桶（默认值），诸如get(),put(),remove()等常用操作只锁当前需要用到的桶,而size()才锁定整张表。
+
+坏处
+	这一种结构的带来的副作用是Hash的过程要比普通的HashMap要长
+
+好处
+	写操作的时候可以只对元素所在的Segment进行加锁即可，不会影响到其他的Segment，这样，在最理想的情况下，ConcurrentHashMap可以最高同时支持Segment数量大小的写操作（刚好这些写操作都非常平均地分布在所有的Segment上）。
+	所以，通过这一种结构，ConcurrentHashMap的并发能力可以大大的提高。 
+
+JDK8中ConcurrentHashMap参考了JDK8 HashMap的实现，采用了数组+链表+红黑树的实现方式来设计，内部大量采用CAS操作。
+	 CAS是compare and swap的缩写，即我们所说的比较交换。cas是一种基于锁的操作，而且是乐观锁。在java中锁分为乐观锁和悲观锁。悲观锁是将资源锁住，等一个之前获得锁的线程释放锁之后，下一个线程才可以访问。而乐观锁采取了一种宽泛的态度，通过某种方式不加锁来处理资源，比如通过给记录加version来获取数据，性能较悲观锁有很大的提高。
+	CAS 操作包含三个操作数 —— 内存位置（V）、预期原值（A）和新值(B)。如果内存地址里面的值和A的值是一样的，那么就将内存里面的值更新成B。CAS是通过无限循环来获取数据的，若果在第一轮循环中，a线程获取地址里面的值被b线程修改了，那么a线程需要自旋，到下次循环才有可能机会执行。
+
+	JDK8中彻底放弃了Segment转而采用的是Node，其设计思想也不再是JDK1.7中的分段锁思想。
+	Node：保存key，value及key的hash值的数据结构。其中value和next都用volatile修饰，保证并发的可见性。 
+	Java8 ConcurrentHashMap结构基本上和Java8的HashMap一样，不过保证线程安全性。
+
+	在JDK8中ConcurrentHashMap的结构，由于引入了红黑树，使得ConcurrentHashMap的实现非常复杂，我们都知道，红黑树是一种性能非常好的二叉查找树，其查找性能为
+	O（logN），但是其实现过程也非常复杂，而且可读性也非常差，Doug Lea的思维能力确实不是一般人能比的，早期完全采用链表结构时Map的查找时间复杂度为O（N），JDK8中
+	ConcurrentHashMap在链表的长度大于某个阈值的时候会将链表转换成红黑树进一步提高其查找性能。
+
+JDK1.8版本的ConcurrentHashMap的数据结构已经接近HashMap，相对而言，ConcurrentHashMap只是增加了同步的操作来控制并发，从JDK1.7版本的ReentrantLock+Segment+HashEntry，到JDK1.8版本中synchronized+CAS+HashEntry+红黑树。
+
+1.数据结构：取消了Segment分段锁的数据结构，取而代之的是数组+链表+红黑树的结构。
+2.保证线程安全机制：JDK1.7采用segment的分段锁机制实现线程安全，其中segment继承自ReentrantLock。JDK1.8采用CAS+Synchronized保证线程安全。
+3.锁的粒度：原来是对需要进行数据操作的Segment加锁，现调整为对每个数组元素加锁（Node）。
+4.链表转化为红黑树:定位结点的hash算法简化会带来弊端,Hash冲突加剧,因此在链表节点数量大于8时，会将链表转化为红黑树进行存储。
+5.查询时间复杂度：从原来的遍历链表O(n)，变成遍历红黑树O(logN)。
+
+Java的集合容器框架中，主要有四大类别：List、Set、Queue、Map，大家熟知的这些集合类ArrayList、LinkedList、HashMap这些容器都是非线程安全的。
+如果有多个线程并发地访问这些容器时，就会出现问题。因此，在编写程序时，在多线程环境下必须要求程序员手动地在任何访问到这些容器的地方进行同步处理，这样导致在使用这些容器的时候非常地不方便。
+所以，Java先提供了同步容器供用户使用。
+同步容器可以简单地理解为通过synchronized来实现同步的容器，比如Vector、Hashtable以及SynchronizedList等容器。 
+
+同步容器，主要的分类：
+
+    Vector
+    Stack
+    HashTable
+    Collections.synchronized方法生成
+
+同步容器面临的问题
+可以通过查看Vector，Hashtable等这些同步容器的实现代码，可以看到这些容器实现线程安全的方式就是将它们的状态封装起来，并在需要同步的方法上加上关键字synchronized。
+这样做的代价是削弱了并发性，当多个线程共同竞争容器级的锁时，吞吐量就会降低。 因此为了解决同步容器的性能问题，所以才有了并发容器。
+
+并发类容器是专门针对多线程并发设计的，使用了锁分段技术，只对操作的位置进行同步操作，但是其他没有操作的位置其他线程仍然可以访问，提高了程序的吞吐量。
+采用了CAS算法和部分代码使用synchronized锁保证线程安全。 
+
+并发容器的分类：
+	 1.ConcurrentHashMap
+	对应的非并发容器：HashMap
+	目标：代替Hashtable、synchronizedMap，支持复合操作
+	原理：JDK6中采用一种更加细粒度的加锁机制Segment“分段锁”，JDK8中采用CAS无锁算法。
+
+	2.CopyOnWriteArrayList
+	对应的非并发容器：ArrayList
+	目标：代替Vector、synchronizedList
+	原理：利用高并发往往是读多写少的特性，对读操作不加锁，对写操作，先复制一份新的集合，在新的集合上面修改，然后将新集合赋值给旧的引用，并通过volatile 保证其可见性，当然写操作的锁是必不可少的了。
+
+	3.CopyOnWriteArraySet
+	对应的非并发容器：HashSet
+	目标：代替synchronizedSet
+	原理：基于CopyOnWriteArrayList实现，其唯一的不同是在add时调用的是CopyOnWriteArrayList的addIfAbsent方法，其遍历当前Object数组，如Object数组中已有了当前元素，则直接返回，如果没有则放入Object数组的尾部，并返回。
+
+	4.ConcurrentSkipListMap
+	对应的非并发容器：TreeMap
+	目标：代替synchronizedSortedMap(TreeMap)
+	原理：Skip list（跳表）是一种可以代替平衡树的数据结构，默认是按照Key值升序的。
+
+	5.ConcurrentSkipListSet
+	对应的非并发容器：TreeSet
+	目标：代替synchronizedSortedSet
+	原理：内部基于ConcurrentSkipListMap实现
+
+	6.ConcurrentLinkedQueue
+	不会阻塞的队列
+	对应的非并发容器：Queue
+	原理：基于链表实现的FIFO队列（LinkedList的并发版本）
+
+	7.LinkedBlockingQueue、ArrayBlockingQueue、PriorityBlockingQueue
+	对应的非并发容器：BlockingQueue
+	特点：拓展了Queue，增加了可阻塞的插入和获取等操作
+	原理：通过ReentrantLock实现线程安全，通过Condition实现阻塞和唤醒
+
+实现类：
+
+    LinkedBlockingQueue：基于链表实现的可阻塞的FIFO队列
+    ArrayBlockingQueue：基于数组实现的可阻塞的FIFO队列
+    PriorityBlockingQueue：按优先级排序的队列
+
+并发工具包：
+1.并发工具类
+	提供了比synchronized更加高级的各种同步结构：包括CountDownLatch、CyclicBarrier、Semaphore等，可以实现更加丰富的多线程操作。
+2.并发容器
+	提供各种线程安全的容器：最常见的ConcurrentHashMap、有序的ConcurrentSkipListMap,实现线程安全的动态数组CopyOnWriteArrayList等。
+3.并发队列
+	各种BlockingQueue的实现：常用的ArrayBlockingQueue、SynchorousQueue或针对特定场景的PriorityBlockingQueue。
+4.Executor框架
+	可以创建各种不同类型的线程池，调度任务运行等，绝大部分情况下，不再需要自己从头实现线程池和任务调度器。 
+
+常用的并发容器：
+1.ConcurrentHashMap
+	经常使用的并发容器，JDK 1.7和1.8的底层数据结构发生了变化(后续文章会详解)，这里可以建议学习顺序如下：从Java7 HashMap -> Java7 ConcurrentHashMap -> Java8 HashMap -> Java8 ConcurrentHashMap，这样可以更好的掌握这个并发容器，毕竟都是从HashMap进化而来。
+2.ConcurrentSkipListMap
+	在乎顺序，需要对数据进行非常频繁的修改
+3.CopyOnWrite容器
+	CopyOnWrite容器即写时复制的容器。从JDK1.5开始Java并发包里提供了两个使用CopyOnWrite机制实现的并发容器,CopyOnWriteArrayList和CopyOnWriteArraySet。
+4.各种并发队列的实现
+	如各种BlockedQueue实现，比较典型的ArrayBlockingQueue、SynchorousQueue。 
+
+常用并发工具类：
+1.CountDownLatch
+	功能：CountDownLatch是一个同步的辅助类，允许一个或多个线程，等待其他一组线程完成操作，再继续执行。
+	原理：CountDownLatch是通过一个计数器来实现的，计数器的初始值为需要等待线程的数量。
+
+    eg：CountDownLatch c = new CountDownLatch(10); // 等待线程的数量为10
+
+    主线程调用CountDownLatch的await()方法会阻塞当前线程(即:主线程在闭锁上等待)，直到计数器的值为0。
+    当一个工作线程完成了自己的任务后，调用CountDownLatch的countDown()方法，计数器的值就会减1。
+    当计数器值为0时，说明所有的工作线程都执行完了，此时，在闭锁上等待的主线程就可以恢复执行任务。
+
+应用场景
+	倒数计时器
+	例如：一种典型的场景就是火箭发射。在火箭发射前，为了保证万无一失，往往还要进行各项设备、仪器的检查。 只有等所有检查完毕后，引擎才能点火。这种场景就非常适合使用CountDownLatch。
+	它可以使得点火线程，等待所有检查线程全部完工后，再执行
+
+	使用方式
+	static final CountDownLatch end = new CountDownLatch(10);
+	end.countDown(); 
+	end.await();
+
+2.CyclicBarrier
+	功能:CyclicBarrier的字面意思是可循环使用（Cyclic）的屏障（Barrier）。它要做的事情是，让一组线程到达一个屏障（也可以叫同步点）时被阻塞，直到最后一个线程到达屏障时，屏障才会开门，所有被屏障拦截的线程才会继续运行。
+	和CountDownLatch相似，也是等待某些线程都做完以后再执行。
+	与CountDownLatch区别
+	在于这个计数器可以反复使用。比如，假设我们将计数器设置为10。那么凑齐第一批1 0个线程后，计数器就会归零，然后接着凑齐下一批10个线程。
+
+	原理：
+	1)CyclicBarrier是通过一个计数器来实现的，计数器的初始值为需要等待线程的数量。eg：CyclicBarrier c = new CyclicBarrier(2); // 等待线程的数量为2
+	2)每个线程调用CyclicBarrier的await()方法，使自己进入等待状态。
+	3)当所有的线程都调用了CyclicBarrier的await()方法后，所有的线程停止等待，继续运行。
+
+	使用方式：
+	public CyclicBarrier(int parties, Runnable barrierAction) 
+	barrierAction就是当计数器一次计数完成后，系统会执行的动作
+	await()
+
+3.信号量Semaphore
+	功能：Java提供了经典信号量Semaphore的实现，它通过控制一定数量的许可（permit）的方式，来达到限制通用资源访问的目的。例如：控制并发的线程数。
+	原理：
+	1)Semaphore是通过一个计数器(记录许可证的数量)来实现的，计数器的初始值为需要等待线程的数量。
+	eg：Semaphore s = new Semaphore(10); // 线程最大的并发数为10
+	2)线程通过acquire()方法获取许可证(计数器的值减1)，只有获取到许可证才可以继续执行下去，否则阻塞当前线程。
+	3)线程通过release()方法归还许可证(计数器的值加1)。
+	说明：使用tryAcquire()方法可以立即得到执行的结果：尝试获取一个许可证，若获取成功，则立即返回true，若获取失败，则立即返回false。
+
+	应用场景：
+	Semaphore可以用于做流量控制，特别是公用资源有限的应用场景，比如数据库连接。
+	举一个场景：例如在车站、机场等出租车时，当很多空出租车就位时，为防止过度拥挤，调度员指挥排队等待坐车的队伍一次进来5个人上车，等这5个人坐车出发，再放进去下一批。这和Semaphore的工作原理有些类似。
+
+4.交换者Exchanger
+	功能：Exchanger（交换者）是一个用于线程间协作的工具类。Exchanger用于进行线程间的数据交换。它提供一个同步点，在这个同步点两个线程可以交换彼此的数据。这两个线程通过exchange方法交换数据，
+	如果第一个线程先执行exchange方法，它会一直等待第二个线程也执行exchange，当两个线程都到达同步点时，这两个线程就可以交换数据，将本线程生产出来的数据传递给对方。
+
+	原理：
+	1)线程A调用public V exchange(V dataA)方法，线程A到达同步点，并且在线程B到达同步点前一直等待。
+	2)线程B调用public V exchange(V dataB)方法，线程B到达同步点。
+	3)线程A与线程B都达到同步点时，线程将自己的数据传递给对方，两个线程完成了数据的交换了。
+
+	Exchanger的应用场景：Exchanger可以用于校对工作的场景。
